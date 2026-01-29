@@ -1,0 +1,18 @@
+[package]
+name = "imanes_nfc"
+version = "0.1.0"
+edition = "2024"
+
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+axum = { version = "0.7", features = ["macros"] } # Web Framework
+mongodb = "2.8" # Driver oficial
+serde = { version = "1.0", features = ["derive"] } # JSON
+serde_json = "1.0"
+dotenv = "0.15" # Variables de entorno
+tera = "1.19" # Motor de templates (tipo Jinja2)
+tower-http = { version = "0.5", features = ["fs", "trace"] } # Servir estáticos
+tracing = "0.1"
+tracing-subscriber = "0.3"
+regex = "1.10" # Para validar links de TikTok
