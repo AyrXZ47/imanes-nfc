@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configura tu Imán</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center h-screen">
+    <div class="bg-gray-800 p-8 rounded-xl shadow-2xl max-w-md w-full border border-gray-700">
+        <div class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+                ¡Imán Encontrado!
+            </h1>
+            <p class="text-gray-400 mt-2">Código: <span class="font-mono text-yellow-400">{{ codigo }}</span></p>
+        </div>
+
+        <form action="/api/setup" method="POST" class="space-y-4">
+            <input type="hidden" name="codigo" value="{{ codigo }}">
+            
+            <div>
+                <label class="block text-sm font-medium mb-1">Pega tu link de TikTok o Instagram</label>
+                <input type="url" name="target_url" required 
+                    placeholder="https://tiktok.com/@tu_usuario"
+                    class="w-full p-3 bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 border border-gray-600">
+            </div>
+
+            <button type="submit" 
+                class="w-full py-3 px-4 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 rounded-lg font-bold transition transform hover:scale-105">
+                Guardar Destino 🚀
+            </button>
+        </form>
+    </div>
+</body>
+</html>
