@@ -1,41 +1,47 @@
 # ETAPA 1: Constructor (Builder)
-# Usamos una imagen oficial de Rust para compilar
-FROM rust:1.75-slim-bookworm as builder
+# Usamos la versión MÁS RECIENTE de Rust para evitar errores de compatibilidad
+FROM rust:latest as builder
 
-# Instalamos dependencias del sistema necesarias para compilar (OpenSSL)
+# Instalamos dependencias del sistema (OpenSSL es vital para Mongo)
 RUN apt-get update && apt-get install -y pkg-config libssl-dev
 
-# Creamos un proyecto vacío para cachear las dependencias
 WORKDIR /app
+
+# Truco de caché: Creamos un proyecto vacío para compilar solo las librerías primero
+RUN cargo new --bin imanes_nfc
+WORKDIR /app/imanes_nfc
+
+# Copiamos tus archivos de configuración
 COPY Cargo.toml Cargo.lock ./
-# Creamos un main dummy para que compile solo las librerías primero
-mkdir src && echo "fn main() {}" > src/main.rs
+
+# Compilamos SOLO las dependencias (esto tardará la primera vez, luego vuela)
 RUN cargo build --release
 
-# Ahora copiamos TU código real
-COPY . .
-# Forzamos la actualización del archivo main para que lo recompile
-RUN touch src/main.rs
+# Ahora borramos el código basura y copiamos TU código real
+RUN rm src/*.rs
+COPY ./src ./src
+COPY ./templates ./templates
+# COPY ./static ./static  <-- Descomenta si usas static
+
+# Borramos el ejecutable anterior para forzar la recompilación con tu código
+RUN rm ./target/release/deps/imanes_nfc*
 RUN cargo build --release
 
-# ETAPA 2: Ejecución (Runtime)
-# Usamos una imagen ligera de Debian para correr el programa
+# ETAPA 2: Ejecución (Runtime) Final
 FROM debian:bookworm-slim
 
-# Instalamos certificados SSL (necesarios para conectarse a Mongo Atlas)
+# Instalamos certificados SSL para que pueda hablar con Mongo Atlas
 RUN apt-get update && apt-get install -y ca-certificates libssl-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copiamos el binario desde la etapa anterior
-COPY --from=builder /app/target/release/imanes_nfc .
-
-# ¡IMPORTANTE! Copiamos las carpetas de templates y static
-COPY templates/ ./templates/
-# COPY static/ ./static/  <-- Descomenta si usas la carpeta static
+# Copiamos el binario compilado (Asegúrate que en Cargo.toml tu name="imanes_nfc")
+COPY --from=builder /app/imanes_nfc/target/release/imanes_nfc .
+COPY --from=builder /app/imanes_nfc/templates ./templates
 
 # Exponemos el puerto
+ENV SERVER_PORT=3000
 EXPOSE 3000
 
-# Comando para iniciar
+# Arrancamos la nave
 CMD ["./imanes_nfc"]
