@@ -5,6 +5,7 @@ use tokio::time::{sleep, Duration};
 use time::OffsetDateTime;
 use axum::http::header;
 use mongodb::bson::DateTime;
+use chrono::{Datelike, Utc, TimeZone};
 
 use axum::{
     extract::{Form, Path, State},
@@ -204,39 +205,103 @@ pub async fn admin_dashboard(
     
     let collection = state.db.collection::<Iman>("imanes");
 
-    // 2. MÉTRICAS GENERALES (KPIs)
-    // Total de imanes fabricados (registrados en DB)
-    let total_imanes = collection.count_documents(doc! {}, None).await.unwrap_or(0);
-    
-    // Imanes "Vivos" (Ya comprados y configurados)
-    let filter_activos = doc! { "active": true };
-    let imanes_activos = collection.count_documents(filter_activos, None).await.unwrap_or(0);
-
-    // Imanes "En Stock" (Aun vírgenes)
-    let imanes_virgenes = total_imanes - imanes_activos;
-
-    // 3. TOP 10 VIRALES (Los más escaneados)
-    let find_options = FindOptions::builder()
-        .sort(doc! { "visitas": -1 }) // Orden descendente (Mayor a menor)
-        .limit(10)
-        .build();
-
-    let mut cursor = collection.find(doc! { "visitas": { "$gt": 0 } }, find_options).await.unwrap();
-    
-    let mut top_imanes = Vec::new();
+    // Traemos TODOS los imanes para hacer conteo en memoria
+    let mut cursor = collection.find(doc! {}, None).await.unwrap();
+    let mut all_imanes: Vec<Iman> = Vec::new();
     while let Ok(Some(iman)) = cursor.try_next().await {
-        top_imanes.push(iman);
+        all_imanes.push(iman);
+    }
+    
+    let total_imanes = all_imanes.len();
+    let mut activos_total = 0;
+    let mut activos_este_mes = 0;
+    let mut activos_mes_pasado = 0;
+    let mut top_imanes = Vec::new();
+
+    let now = Utc::now();
+    let current_month = now.month();
+    let current_year = now.year();
+    
+    // Calculamos mes pasado
+    let (prev_month, prev_month_year) = if current_month == 1 {
+        (12, current_year - 1)
+    } else {
+        (current_month - 1, current_year)
+    };
+
+    let mut history_counts = vec![0; 6]; // [mes-5, mes-4, ... mes-actual]
+    let mut month_labels = Vec::new();
+    
+    // Generar etiquetas de meses (Ej: "Ago", "Sep", "Oct"...)
+    for i in (0..6).rev() {
+        let d = Utc::now() - chrono::Duration::days(i * 30);
+        month_labels.push(d.format("%b").to_string());
     }
 
-    // 4. RENDERIZAR EL DASHBOARD
+    for iman in &all_imanes {
+        
+        if iman.active {
+            activos_total += 1;
+            
+            // Checamos fecha de activación
+            if let Some(fecha_activacion) = iman.activated_at {
+                // Convertimos la fecha de Mongo a Chrono manualmente
+                if let Some(fecha) = chrono::DateTime::from_timestamp_millis(fecha_activacion.timestamp_millis()) {
+                    if fecha.month() == current_month && fecha.year() == current_year {
+                        activos_este_mes += 1;
+                    } else if fecha.month() == prev_month && fecha.year() == prev_month_year {
+                        activos_mes_pasado += 1;
+                    }
+
+                    // Chart logic
+                    let months_diff = (now.year() - fecha.year()) * 12 + (now.month() - fecha.month()) as i32;
+                    if months_diff >= 0 && months_diff < 6 {
+                        // Invertimos el índice porque history_counts[5] es el mes actual
+                        let index = 5 - months_diff as usize;
+                        history_counts[index] += 1;
+                    }
+                }
+            }
+        }
+
+        if iman.visitas > 0 {
+            top_imanes.push(iman.clone());
+        }
+    }
+
+    // Ordenamos el vector para sacar el Top 10 manual
+    top_imanes.sort_by(|a, b| b.visitas.cmp(&a.visitas));
+    let top_10_raw: Vec<Iman> = top_imanes.into_iter().take(10).collect();
+    
+    // Convertir a formato amigable para Tera (View Model)
+    // Esto evita errores con bson::DateTime en el template
+    let top_10_view: Vec<serde_json::Value> = top_10_raw.into_iter().map(|iman| {
+        let last_scan_iso = iman.last_scan_at
+            .and_then(|dt| chrono::DateTime::from_timestamp_millis(dt.timestamp_millis()))
+            .map(|dt| dt.to_rfc3339()); // Convertir a string ISO
+
+        serde_json::json!({
+            "codigo": iman.codigo,
+            "target_url": iman.target_url,
+            "visitas": iman.visitas,
+            "last_scan_at": last_scan_iso
+        })
+    }).collect();
+
+    let virgenes = total_imanes - activos_total;
+
+    // Pasamos datos a la plantilla
     let mut context = tera::Context::new();
     context.insert("total", &total_imanes);
-    context.insert("activos", &imanes_activos);
-    context.insert("virgenes", &imanes_virgenes);
-    context.insert("top_imanes", &top_imanes);
+    context.insert("activos", &activos_total);
+    context.insert("virgenes", &virgenes);
+    context.insert("top_imanes", &top_10_view);
+    context.insert("activos_mes", &activos_este_mes);      
+    context.insert("activos_mes_ant", &activos_mes_pasado); 
+    context.insert("chart_data", &history_counts);
+    context.insert("chart_labels", &month_labels);
     
     // Pasamos el dominio base para facilitar la grabación de NFCs
-    // (Esto debería venir de ENV, pero por ahora lo calculamos o hardcodeamos)
     context.insert("base_url", "https://imanes-nfc-production.up.railway.app"); 
 
     match state.tera.render("admin.html", &context) {
@@ -276,6 +341,7 @@ pub async fn generate_batch(
             visitas: 0,
             activated_at: None,
             last_scan_at: None,
+            exported: false,
         });
     }
 
@@ -312,26 +378,39 @@ pub async fn export_csv(
 
     let collection = state.db.collection::<Iman>("imanes");
     
-    // Buscamos solo los que NO tienen URL (los vírgenes para producción)
-    // OJO: Ajusta el filtro según tu lógica. Aquí busco los que active: false
-    let filter = doc! { "active": false };
-    let mut cursor = collection.find(filter, None).await.unwrap();
+    // 1. FILTRO: Solo dame los que NO están activos Y NO han sido exportados
+    // (O usamos $ne: true para incluir los que no tienen el campo todavía)
+    let filter = doc! { 
+        "active": false,
+        "exported": { "$ne": true } 
+    };
 
-    let mut csv_content = String::from("codigo,url_completa\n"); // Encabezado CSV
-
-    // Base URL (Hardcodeada o de ENV, por ahora la ponemos fija para producción)
-    let base_url = "https://imanes-nfc-production.up.railway.app/v/";
+    let mut cursor = collection.find(filter.clone(), None).await.unwrap();
+    let mut csv_content = String::from("codigo,url_completa\n");
+    let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let mut count = 0;
 
     while let Ok(Some(iman)) = cursor.try_next().await {
         let linea = format!("{},{}{}\n", iman.codigo, base_url, iman.codigo);
         csv_content.push_str(&linea);
+        count += 1;
     }
 
-    // Devolver como archivo descargable
+    if count == 0 {
+        return (StatusCode::OK, "⚠️ No hay imanes nuevos para exportar. Genera un lote primero.").into_response();
+    }
+
+    // 2. ACTUALIZACIÓN MASIVA (Atomic Update)
+    // Marcamos TODOS los que acabamos de encontrar como exported: true
+    // Así la próxima vez, el filtro de arriba ya no los encontrará.
+    let update = doc! { "$set": { "exported": true } };
+    collection.update_many(filter, update, None).await.ok();
+
+    // 3. Devolver CSV
     (
         [
             (header::CONTENT_TYPE, "text/csv"),
-            (header::CONTENT_DISPOSITION, "attachment; filename=\"lote_imanes.csv\""),
+            (header::CONTENT_DISPOSITION, "attachment; filename=\"lote_produccion_nuevo.csv\""),
         ],
         csv_content,
     ).into_response()

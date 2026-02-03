@@ -90,6 +90,14 @@
             <canvas id="viralChart"></canvas>
             </div>
             </div>
+            <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg mt-6">
+              <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                🚀 Crecimiento de Activaciones
+              </h2>
+            <div class="h-64">
+              <canvas id="growthChart"></canvas>
+            </div>
+            </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm text-slate-400">
@@ -98,6 +106,7 @@
                             <th class="px-6 py-3">Código</th>
                             <th class="px-6 py-3">Destino Actual</th>
                             <th class="px-6 py-3 text-right">Scans</th>
+                            <th class="px-6 py-3">Última Actividad</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-700">
@@ -110,6 +119,15 @@
                                 </a>
                             </td>
                             <td class="px-6 py-4 text-right font-bold text-green-400">{{ iman.visitas }}</td>
+                            <td class="px-6 py-4 text-xs text-gray-400">
+                                    {% if iman.last_scan_at %}
+                                    {{ iman.last_scan_at | date(format="%Y-%m-%d %H:%M") }}
+                                    {% else %}
+                              <span class="text-slate-600">Sin historial</span>
+                                    {% endif %}
+                            </td>
+
+
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -122,10 +140,32 @@
             </div>
         </div>
 
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+    
+    <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg flex items-center justify-between">
+        <div>
+            <h3 class="text-slate-400 text-sm font-medium uppercase">Activados este Mes</h3>
+            <p class="text-3xl font-bold text-white mt-1">{{ activos_mes }}</p>
+        </div>
+        <div class="text-4xl">📅</div>
+    </div>
+
+    <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg flex items-center justify-between">
+        <div>
+            <h3 class="text-slate-400 text-sm font-medium uppercase">Mes Anterior</h3>
+            <p class="text-3xl font-bold text-gray-400 mt-1">{{ activos_mes_ant }}</p>
+        </div>
+        <div class="text-4xl opacity-50">⏮️</div>
+    </div>
+
+  </div>
+
+
     </div>
 
     <script>
-        const baseUrl = "{{ base_url }}";
+        const baseUrl = "{{ base_url | safe }}";
 
         function generarLink() {
             const codigo = document.getElementById('codigoInput').value.trim().toUpperCase();
@@ -143,7 +183,6 @@
         }
     </script>
     <script>
-      // ... (tu código anterior de generarLink y copiarLink) ...
 
     // CONFIGURACIÓN DE LA GRÁFICA
     const ctx = document.getElementById('viralChart').getContext('2d');
@@ -186,5 +225,40 @@
         }
     });
     </script>
+    <script>
+    // ... tu código anterior ...
+
+    // GRÁFICA DE LÍNEAS (CRECIMIENTO)
+    const ctxGrowth = document.getElementById('growthChart').getContext('2d');
+    const growthData = [{{ chart_data | join(sep=",") }}]; // Datos de Rust
+    const growthLabels = [{% for l in chart_labels %}"{{l}}",{% endfor %}];
+
+    new Chart(ctxGrowth, {
+        type: 'line',
+        data: {
+            labels: growthLabels,
+            datasets: [{
+                label: 'Imanes Activados',
+                data: growthData,
+                borderColor: '#10b981', // Verde esmeralda
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                borderWidth: 3,
+                tension: 0.4, // Curva suave
+                fill: true,
+                pointBackgroundColor: '#fff',
+                pointRadius: 5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                x: { grid: { display: false } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+</script>
 </body>
 </html>

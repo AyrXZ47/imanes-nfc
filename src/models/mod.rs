@@ -21,4 +21,7 @@ pub struct Iman {
     
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_scan_at: Option<DateTime>, // ¿Cuándo fue la última vez que alguien lo tocó?
+
+    #[serde(default)] 
+    pub exported: bool, 
 }

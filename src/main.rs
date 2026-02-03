@@ -62,7 +62,7 @@ async fn main() {
         .with_state(state);
 
     // 5. Servidor
-    let port = std::env::var("SERVER_PORT").unwrap_or_else(|_| "3000".to_string());
+    let port = std::env::var("BASE_URL").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);
     println!("🚀 Servidor corriendo en http://{}", addr);
     
