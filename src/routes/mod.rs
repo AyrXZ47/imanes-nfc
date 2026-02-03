@@ -1,3 +1,7 @@
+use futures::stream::TryStreamExt;
+use mongodb::options::FindOptions;
+use axum::extract::Query;
+
 use axum::{
     extract::{Form, Path, State},
     http::StatusCode,
@@ -39,7 +43,7 @@ pub async fn redirect_handler(
         .await
     {
         Ok(Some(iman)) => {
-            // ¡Encontrado y contador actualizado! ✅
+           // ¡Encontrado y contador actualizado! ✅
             if iman.active {
                 if let Some(url) = iman.target_url {
                     if !url.is_empty() {
@@ -108,5 +112,65 @@ pub async fn save_iman(
             format!("Error guardando: {}", e),
         )
             .into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct AdminParams {
+    pwd: Option<String>,
+}
+
+pub async fn admin_dashboard(
+    State(state): State<AppState>,
+    Query(params): Query<AdminParams>,
+) -> Response {
+    // 1. SEGURIDAD: Verificar contraseña maestra
+    // En producción, esto vendría de una variable de entorno real
+    let admin_pass = std::env::var("ADMIN_PASSWORD").unwrap_or("admin123".to_string());
+    
+    if params.pwd != Some(admin_pass) {
+        return (StatusCode::UNAUTHORIZED, "🔒 Acceso Denegado. Contraseña incorrecta.").into_response();
+    }
+
+    let collection = state.db.collection::<Iman>("imanes");
+
+    // 2. MÉTRICAS GENERALES (KPIs)
+    // Total de imanes fabricados (registrados en DB)
+    let total_imanes = collection.count_documents(doc! {}, None).await.unwrap_or(0);
+    
+    // Imanes "Vivos" (Ya comprados y configurados)
+    let filter_activos = doc! { "active": true };
+    let imanes_activos = collection.count_documents(filter_activos, None).await.unwrap_or(0);
+
+    // Imanes "En Stock" (Aun vírgenes)
+    let imanes_virgenes = total_imanes - imanes_activos;
+
+    // 3. TOP 10 VIRALES (Los más escaneados)
+    let find_options = FindOptions::builder()
+        .sort(doc! { "visitas": -1 }) // Orden descendente (Mayor a menor)
+        .limit(10)
+        .build();
+
+    let mut cursor = collection.find(doc! { "visitas": { "$gt": 0 } }, find_options).await.unwrap();
+    
+    let mut top_imanes = Vec::new();
+    while let Ok(Some(iman)) = cursor.try_next().await {
+        top_imanes.push(iman);
+    }
+
+    // 4. RENDERIZAR EL DASHBOARD
+    let mut context = tera::Context::new();
+    context.insert("total", &total_imanes);
+    context.insert("activos", &imanes_activos);
+    context.insert("virgenes", &imanes_virgenes);
+    context.insert("top_imanes", &top_imanes);
+    
+    // Pasamos el dominio base para facilitar la grabación de NFCs
+    // (Esto debería venir de ENV, pero por ahora lo calculamos o hardcodeamos)
+    context.insert("base_url", "https://imanes-nfc-production.up.railway.app"); 
+
+    match state.tera.render("admin.html", &context) {
+        Ok(html) => Html(html).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
     }
 }

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StikerTunning - Panel de Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-900 text-white font-sans">
+
+    <nav class="bg-slate-800 border-b border-slate-700 p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">
+                🚀 StikerTunning Analytics
+            </h1>
+            <span class="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full border border-green-500/30">Sistema Activo</span>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-6 space-y-8">
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+                <h3 class="text-slate-400 text-sm font-medium uppercase">Imanes Activados</h3>
+                <p class="text-4xl font-bold text-white mt-2">{{ activos }}</p>
+                <div class="mt-2 text-xs text-green-400">🔥 Clientes felices</div>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+                <h3 class="text-slate-400 text-sm font-medium uppercase">En Inventario (Vírgenes)</h3>
+                <p class="text-4xl font-bold text-white mt-2">{{ virgenes }}</p>
+                <div class="mt-2 text-xs text-yellow-400">📦 Listos para venta</div>
+            </div>
+            <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+                <h3 class="text-slate-400 text-sm font-medium uppercase">Total Fabricados</h3>
+                <p class="text-4xl font-bold text-white mt-2">{{ total }}</p>
+                <div class="mt-2 text-xs text-blue-400">🏭 Capacidad instalada</div>
+            </div>
+        </div>
+
+        <div class="bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+                🛠️ Herramienta de Grabado NFC
+            </h2>
+            <p class="text-slate-400 mb-4 text-sm">
+                Genera el enlace para grabar en el chip. Copia esto en tu app de "NFC Tools".
+            </p>
+            <div class="flex gap-4">
+                <input type="text" id="codigoInput" placeholder="Ej: PUEBLO-001" 
+                    class="bg-slate-900 border border-slate-600 rounded-lg p-3 flex-1 focus:ring-2 focus:ring-purple-500 outline-none uppercase">
+                <button onclick="generarLink()" 
+                    class="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg font-bold transition">
+                    Generar Link
+                </button>
+            </div>
+            <div id="resultadoLink" class="mt-4 hidden p-4 bg-slate-900 rounded-lg border border-purple-500/30 flex justify-between items-center">
+                <code id="linkText" class="text-purple-300 font-mono text-sm"></code>
+                <button onclick="copiarLink()" class="text-xs bg-slate-700 px-3 py-1 rounded hover:bg-slate-600">Copiar</button>
+            </div>
+        </div>
+
+        <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+            <div class="p-6 border-b border-slate-700">
+                <h2 class="text-xl font-bold">🏆 Top Viral (Lo más escaneado)</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-400">
+                    <thead class="bg-slate-900 text-slate-200 uppercase font-medium">
+                        <tr>
+                            <th class="px-6 py-3">Código</th>
+                            <th class="px-6 py-3">Destino Actual</th>
+                            <th class="px-6 py-3 text-right">Scans</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700">
+                        {% for iman in top_imanes %}
+                        <tr class="hover:bg-slate-700/50 transition">
+                            <td class="px-6 py-4 font-mono text-white">{{ iman.codigo }}</td>
+                            <td class="px-6 py-4 truncate max-w-xs">
+                                <a href="{{ iman.target_url }}" target="_blank" class="text-blue-400 hover:underline">
+                                    {{ iman.target_url }}
+                                </a>
+                            </td>
+                            <td class="px-6 py-4 text-right font-bold text-green-400">{{ iman.visitas }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if top_imanes | length == 0 %}
+                <div class="p-6 text-center text-slate-500">
+                    Aún no hay datos de visitas. ¡Empieza a compartir los imanes!
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const baseUrl = "{{ base_url }}";
+
+        function generarLink() {
+            const codigo = document.getElementById('codigoInput').value.trim().toUpperCase();
+            if (!codigo) return;
+            
+            const fullLink = `${baseUrl}/v/${codigo}`;
+            document.getElementById('linkText').innerText = fullLink;
+            document.getElementById('resultadoLink').classList.remove('hidden');
+        }
+
+        function copiarLink() {
+            const text = document.getElementById('linkText').innerText;
+            navigator.clipboard.writeText(text);
+            alert("Link copiado al portapapeles 📋");
+        }
+    </script>
+</body>
+</html>

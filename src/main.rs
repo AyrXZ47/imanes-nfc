@@ -7,6 +7,7 @@ use dotenv::dotenv;
 use std::sync::Arc;
 use tera::Tera; // Importamos Tera
 
+
 // Definimos el "Estado Global" de nuestra app
 #[derive(Clone)]
 pub struct AppState {
@@ -49,6 +50,7 @@ async fn main() {
         .route("/", get(root))
         .route("/v/:codigo", get(routes::redirect_handler))
         .route("/api/setup", post(routes::save_iman))
+        .route("/admin", get(routes::admin_dashboard))
         .with_state(state);
 
     // 5. Servidor
