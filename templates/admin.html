@@ -62,6 +62,12 @@
         <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
             <div class="p-6 border-b border-slate-700">
                 <h2 class="text-xl font-bold">🏆 Top Viral (Lo más escaneado)</h2>
+            <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg mt-6">
+                <h2 class="text-xl font-bold mb-4">📈 Tendencia de Viralidad</h2>
+            <div class="h-64">
+            <canvas id="viralChart"></canvas>
+            </div>
+            </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm text-slate-400">
@@ -113,6 +119,50 @@
             navigator.clipboard.writeText(text);
             alert("Link copiado al portapapeles 📋");
         }
+    </script>
+    <script>
+      // ... (tu código anterior de generarLink y copiarLink) ...
+
+    // CONFIGURACIÓN DE LA GRÁFICA
+    const ctx = document.getElementById('viralChart').getContext('2d');
+    
+    // Convertimos los datos de Tera a JSON seguro para JS
+    const labels = [
+        {% for iman in top_imanes %}"{{ iman.codigo }}",{% endfor %}
+    ];
+    const dataPoints = [
+        {% for iman in top_imanes %}{{ iman.visitas }},{% endfor %}
+    ];
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Escaneos Totales',
+                data: dataPoints,
+                backgroundColor: 'rgba(168, 85, 247, 0.6)', // Color Púrpura Cyberpunk
+                borderColor: 'rgba(168, 85, 247, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' } // Líneas sutiles
+                },
+                x: {
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { labels: { color: '#94a3b8' } } // Texto gris claro
+            }
+        }
+    });
     </script>
 </body>
 </html>
