@@ -2,11 +2,12 @@ mod db;
 mod models;
 mod routes;
 
-use axum::{routing::{get, post}, Router, response::Redirect};
+use axum::{routing::{get, post}, Router, response::{Redirect, IntoResponse}};
 use dotenv::dotenv;
 use std::sync::Arc;
 use tera::Tera; // Importamos Tera
 use tower_cookies::CookieManagerLayer;
+use axum::http::HeaderMap;
 
 
 // Definimos el "Estado Global" de nuestra app
@@ -55,7 +56,9 @@ async fn main() {
         .route("/auth/login", post(routes::process_login))
         .route("/admin", get(routes::admin_dashboard))
         .route("/api/admin/generate", post(routes::generate_batch))
+        .route("/auth/logout", get(routes::logout))
         .layer(CookieManagerLayer::new()) // ¡Activa cookies!
+        .layer(axum::middleware::from_fn(no_cache_headers)) //MIDDLEWARE
         .with_state(state);
 
     // 5. Servidor
@@ -67,8 +70,19 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-// Borra la función vieja que devolvía texto y pon esto:
 async fn root() -> Redirect {
     // Si entran a la raíz, los mandamos al login directo
     Redirect::to("/login")
+}
+
+async fn no_cache_headers(req: axum::extract::Request, next: axum::middleware::Next) -> impl IntoResponse {
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+    
+    // Estas 3 líneas obligan al navegador a NO guardar nada en caché
+    headers.insert("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate".parse().unwrap());
+    headers.insert("Pragma", "no-cache".parse().unwrap());
+    headers.insert("Expires", "0".parse().unwrap());
+
+    response
 }

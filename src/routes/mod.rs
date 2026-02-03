@@ -2,6 +2,7 @@ use futures::stream::TryStreamExt;
 use mongodb::options::FindOptions;
 use tower_cookies::{Cookies, Cookie};
 use tokio::time::{sleep, Duration};
+use time::OffsetDateTime;
 
 use axum::{
     extract::{Form, Path, State},
@@ -243,7 +244,6 @@ pub async fn generate_batch(
     
     // Usamos un prefijo y números aleatorios para evitar colisiones
     // (Simple implementation)
-    use rand::Rng; // Asegúrate de agregar `rand = "0.8"` en Cargo.toml si quieres random real
     // O usa timestamp simple:
     let lote_id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
 
@@ -266,4 +266,16 @@ pub async fn generate_batch(
 
     // Redirigir al dashboard con mensaje de éxito
     Redirect::to("/admin").into_response()
+}
+
+
+// GET /auth/logout
+pub async fn logout(cookies: Cookies) -> Response {
+    // Creamos una cookie vacía con fecha de expiración en el pasado
+    let mut cookie = Cookie::new("admin_session", "");
+    cookie.set_path("/");
+    cookie.set_expires(OffsetDateTime::now_utc() - time::Duration::days(1));
+    cookies.add(cookie);
+
+    Redirect::to("/login").into_response()
 }
