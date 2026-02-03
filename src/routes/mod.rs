@@ -3,6 +3,8 @@ use mongodb::options::FindOptions;
 use tower_cookies::{Cookies, Cookie};
 use tokio::time::{sleep, Duration};
 use time::OffsetDateTime;
+use axum::http::header;
+use mongodb::bson::DateTime;
 
 use axum::{
     extract::{Form, Path, State},
@@ -33,7 +35,11 @@ pub async fn redirect_handler(
     // LÓGICA PRO: "Busca y actualiza" atómicamente
     // Si encuentra el código, le suma 1 a "visitas" automáticamente.
     let filter = doc! { "codigo": &codigo };
-    let update = doc! { "$inc": { "visitas": 1 } }; // $inc es "incrementar" en Mongo
+    let update = doc! { 
+        "$inc": { "visitas": 1 },
+        "$set": { "last_scan_at": DateTime::now() } 
+    };
+
 
     // Opciones: Queremos el documento *después* de actualizarse
     let options = FindOneAndUpdateOptions::builder()
@@ -118,7 +124,15 @@ pub async fn save_iman(
 
     // 3. ACTUALIZACIÓN EN MONGO
     let filter = doc! { "codigo": &form.codigo };
-    let update = doc! { "$set": { "target_url": url_limpia, "active": true } };
+
+    let update = doc! { 
+        "$set": {
+            "target_url": url_limpia,
+            "active": true,
+            "activated_at": DateTime::now(), // ¡Marca de tiempo actual!
+            "last_scan_at": DateTime::now()  // También cuenta como primer scan
+        }
+    };
 
     match collection.update_one(filter, update, None).await {
         Ok(_) => {
@@ -153,11 +167,15 @@ pub async fn process_login(
     let admin_pass = std::env::var("ADMIN_PASSWORD").unwrap_or("admin123".to_string());
 
     if form.password == admin_pass {
-        // Contraseña correcta: Creamos una cookie "session"
-        // En un sistema real usaríamos tokens JWT, pero para esto basta un valor secreto simple
         let mut cookie = Cookie::new("admin_session", "activa");
         cookie.set_path("/");
-        cookie.set_http_only(true); // JS no puede leerla (Seguridad XSS)
+        cookie.set_http_only(true);
+        cookie.set_secure(true); // Solo viaja por HTTPS
+        
+        // ⏱️ AQUÍ ESTÁ LA MAGIA: La sesión muere en 1 hora (3600 segundos)
+        // El navegador la borrará automáticamente aunque no cierren la ventana.
+        cookie.set_max_age(time::Duration::hours(1)); 
+        
         cookies.add(cookie);
 
         Redirect::to("/admin").into_response()
@@ -256,6 +274,8 @@ pub async fn generate_batch(
             target_url: None, // Vírgen
             active: false,    // Inactivo hasta que se configure (o true si quieres que ya funcionen)
             visitas: 0,
+            activated_at: None,
+            last_scan_at: None,
         });
     }
 
@@ -278,4 +298,41 @@ pub async fn logout(cookies: Cookies) -> Response {
     cookies.add(cookie);
 
     Redirect::to("/login").into_response()
+}
+
+
+// GET /api/admin/export_csv
+pub async fn export_csv(
+    cookies: Cookies,
+    State(state): State<AppState>,
+) -> Response {
+    if cookies.get("admin_session").is_none() {
+        return Redirect::to("/login").into_response();
+    }
+
+    let collection = state.db.collection::<Iman>("imanes");
+    
+    // Buscamos solo los que NO tienen URL (los vírgenes para producción)
+    // OJO: Ajusta el filtro según tu lógica. Aquí busco los que active: false
+    let filter = doc! { "active": false };
+    let mut cursor = collection.find(filter, None).await.unwrap();
+
+    let mut csv_content = String::from("codigo,url_completa\n"); // Encabezado CSV
+
+    // Base URL (Hardcodeada o de ENV, por ahora la ponemos fija para producción)
+    let base_url = "https://imanes-nfc-production.up.railway.app/v/";
+
+    while let Ok(Some(iman)) = cursor.try_next().await {
+        let linea = format!("{},{}{}\n", iman.codigo, base_url, iman.codigo);
+        csv_content.push_str(&linea);
+    }
+
+    // Devolver como archivo descargable
+    (
+        [
+            (header::CONTENT_TYPE, "text/csv"),
+            (header::CONTENT_DISPOSITION, "attachment; filename=\"lote_imanes.csv\""),
+        ],
+        csv_content,
+    ).into_response()
 }

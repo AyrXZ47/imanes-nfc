@@ -6,24 +6,32 @@
     <title>StikerTunning - Panel de Control</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚀</text></svg>">
 </head>
 <body class="bg-slate-900 text-white font-sans">
 
     <nav class="bg-slate-800 border-b border-slate-700 p-4">
-        <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-xl font-bold text-white">
-                🚀 StikerTunning Analytics
-            </h1>
-            <span class="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full border border-green-500/30">Sistema Activo</span>
-        </div>
+      <div class="container mx-auto flex justify-between items-center">
+        
         <div class="flex items-center gap-4">
-          <span class="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full border border-green-500/30">Sistema Activo</span>
-          <a href="/auth/logout" class="text-sm text-red-400 hover:text-red-300 font-bold border border-red-500/30 px-3 py-1 rounded hover:bg-red-500/10 transition">
-          Cerrar Sesión 🚪
-          </a>
+            <h1 class="text-xl font-bold text-white flex items-center gap-2">
+                🚀 StikerTunning <span class="hidden md:inline">Analytics</span>
+            </h1>
+            <span class="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full border border-green-500/30 flex items-center gap-1">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                Online
+            </span>
         </div>
-    </nav>
 
+        <div>
+            <a href="/auth/logout" class="text-sm bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white border border-red-500/30 px-4 py-2 rounded-lg transition flex items-center gap-2">
+                <span>Cerrar Sesión</span>
+                🚪
+            </a>
+        </div>
+        
+      </div>
+    </nav>
     <div class="container mx-auto p-6 space-y-8">
         
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -40,6 +48,9 @@
                   <button type="submit" class="bg-blue-600 text-xs px-3 py-2 rounded hover:bg-blue-500 w-full mt-2">
                   🏭 Fabricar Lote (50)
                   </button>
+                  <a href="/api/admin/export" class="block text-center bg-green-600 hover:bg-green-500 text-xs px-3 py-2 rounded w-full mt-2 transition">
+                    ⬇️ Descargar CSV (Excel)
+                  </a>
                 </form>
             </div>
             <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">

@@ -7,7 +7,6 @@ use dotenv::dotenv;
 use std::sync::Arc;
 use tera::Tera; // Importamos Tera
 use tower_cookies::CookieManagerLayer;
-use axum::http::HeaderMap;
 
 
 // Definimos el "Estado Global" de nuestra app
@@ -57,6 +56,7 @@ async fn main() {
         .route("/admin", get(routes::admin_dashboard))
         .route("/api/admin/generate", post(routes::generate_batch))
         .route("/auth/logout", get(routes::logout))
+        .route("/api/admin/export", get(routes::export_csv))
         .layer(CookieManagerLayer::new()) // ¡Activa cookies!
         .layer(axum::middleware::from_fn(no_cache_headers)) //MIDDLEWARE
         .with_state(state);

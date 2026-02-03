@@ -3,6 +3,7 @@
 <head>
     <title>Acceso Administrativo</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚀</text></svg>">
 </head>
 <body class="bg-slate-900 flex items-center justify-center h-screen">
     <div class="bg-slate-800 p-8 rounded-xl shadow-2xl border border-slate-700 w-full max-w-sm">
@@ -46,6 +47,28 @@
         
         // El backend tardará 2 segundos si falla, así que la animación durará eso
     });
+</script>
+
+
+<div id="errorMsg" class="hidden fixed top-5 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-lg shadow-xl border border-red-400 animate-bounce">
+    ⚠️ Contraseña Incorrecta
+</div>
+
+<script>
+    // ... tu script de carga anterior ...
+
+    // Detectar si hay error en la URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('error')) {
+        const msg = document.getElementById('errorMsg');
+        msg.classList.remove('hidden');
+        
+        // Vibrar el celular si es posible (toque cyber)
+        if (navigator.vibrate) navigator.vibrate(200);
+        
+        // Quitar el parámetro de la URL para que no salga si recargas
+        window.history.replaceState({}, document.title, "/login");
+    }
 </script>
 
 </body>
