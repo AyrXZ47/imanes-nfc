@@ -391,7 +391,7 @@ pub async fn export_csv(
     let mut count = 0;
 
     while let Ok(Some(iman)) = cursor.try_next().await {
-        let linea = format!("{},{}{}\n", iman.codigo, base_url, iman.codigo);
+        let linea = format!("{},{}/v/{}\n", iman.codigo, base_url, iman.codigo);
         csv_content.push_str(&linea);
         count += 1;
     }
