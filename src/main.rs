@@ -2,10 +2,11 @@ mod db;
 mod models;
 mod routes;
 
-use axum::{routing::{get, post}, Router};
+use axum::{routing::{get, post}, Router, response::Redirect};
 use dotenv::dotenv;
 use std::sync::Arc;
 use tera::Tera; // Importamos Tera
+use tower_cookies::CookieManagerLayer;
 
 
 // Definimos el "Estado Global" de nuestra app
@@ -50,7 +51,11 @@ async fn main() {
         .route("/", get(root))
         .route("/v/:codigo", get(routes::redirect_handler))
         .route("/api/setup", post(routes::save_iman))
+        .route("/login", get(routes::login_page))
+        .route("/auth/login", post(routes::process_login))
         .route("/admin", get(routes::admin_dashboard))
+        .route("/api/admin/generate", post(routes::generate_batch))
+        .layer(CookieManagerLayer::new()) // ¡Activa cookies!
         .with_state(state);
 
     // 5. Servidor
@@ -62,6 +67,8 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn root() -> &'static str {
-    "Souvenir Backend v1.1 - ¡Con Frontend!"
+// Borra la función vieja que devolvía texto y pon esto:
+async fn root() -> Redirect {
+    // Si entran a la raíz, los mandamos al login directo
+    Redirect::to("/login")
 }

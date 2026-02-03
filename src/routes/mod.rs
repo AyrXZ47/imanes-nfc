@@ -1,6 +1,7 @@
 use futures::stream::TryStreamExt;
 use mongodb::options::FindOptions;
-use axum::extract::Query;
+use tower_cookies::{Cookies, Cookie};
+use tokio::time::{sleep, Duration};
 
 use axum::{
     extract::{Form, Path, State},
@@ -69,7 +70,16 @@ pub async fn redirect_handler(
                     .into_response(),
             }
         }
-        Ok(None) => (StatusCode::NOT_FOUND, "❌ Imán no válido").into_response(),
+        Ok(None) => {
+            // CASO B: El imán NO existe -> Mostrar plantilla 404 bonita
+            let context = tera::Context::new(); 
+            // (Podrías pasar variables si quisieras, por ahora vacío)
+            
+            match state.tera.render("404.html", &context) {
+                Ok(html) => (StatusCode::NOT_FOUND, Html(html)).into_response(),
+                Err(_) => (StatusCode::NOT_FOUND, "❌ Imán no válido").into_response()
+            }
+        },
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("DB error: {}", e),
@@ -85,22 +95,29 @@ pub async fn save_iman(
 ) -> Response {
     let collection = state.db.collection::<Iman>("imanes");
 
-    // Validación básica
-    if !form.target_url.starts_with("http") {
-        return (
-            StatusCode::BAD_REQUEST,
-            "❌ La URL debe empezar con http:// o https://",
-        )
-            .into_response();
+    // 1. LIMPIEZA DE INPUT (Sanitization)
+    let url_limpia = form.target_url.trim();
+
+    // 2. VALIDACIÓN DE SEGURIDAD (Anti-Porno / Anti-Phishing básico)
+    // Forzamos HTTPS y bloqueamos dominios raros si quisieras
+    if !url_limpia.starts_with("https://") {
+         return (StatusCode::BAD_REQUEST, "❌ Por seguridad, solo aceptamos enlaces seguros (https://)").into_response();
+    }
+    
+    // Validación extra: Que parezca una URL real de redes sociales (Opcional pero recomendado)
+    // Esto evita que pongan "https://mi-sitio-de-virus.com"
+    let dominios_permitidos = ["instagram.com", "tiktok.com", "facebook.com", "youtube.com", "twitter.com", "x.com"];
+    let es_seguro = dominios_permitidos.iter().any(|d| url_limpia.contains(d));
+
+    if !es_seguro {
+        // OJO: Puedes quitar esto si quieres permitir cualquier web, 
+        // pero dejarlo reduce riesgo de sitios maliciosos.
+        return (StatusCode::BAD_REQUEST, "⚠️ Por ahora solo permitimos redes sociales reconocidas (TikTok, Instagram, Youtube, etc).").into_response();
     }
 
+    // 3. ACTUALIZACIÓN EN MONGO
     let filter = doc! { "codigo": &form.codigo };
-    let update = doc! {
-        "$set": {
-            "target_url": &form.target_url,
-            "active": true
-        }
-    };
+    let update = doc! { "$set": { "target_url": url_limpia, "active": true } };
 
     match collection.update_one(filter, update, None).await {
         Ok(_) => {
@@ -115,23 +132,57 @@ pub async fn save_iman(
     }
 }
 
+// Estructura para recibir el form del login
 #[derive(Deserialize)]
-pub struct AdminParams {
-    pwd: Option<String>,
+pub struct LoginForm {
+    password: String,
 }
 
-pub async fn admin_dashboard(
-    State(state): State<AppState>,
-    Query(params): Query<AdminParams>,
-) -> Response {
-    // 1. SEGURIDAD: Verificar contraseña maestra
-    // En producción, esto vendría de una variable de entorno real
-    let admin_pass = std::env::var("ADMIN_PASSWORD").unwrap_or("admin123".to_string());
-    
-    if params.pwd != Some(admin_pass) {
-        return (StatusCode::UNAUTHORIZED, "🔒 Acceso Denegado. Contraseña incorrecta.").into_response();
-    }
+// 1. Mostrar pantalla de Login (GET /login)
+pub async fn login_page(State(state): State<AppState>) -> Response {
+    let context = tera::Context::new();
+    Html(state.tera.render("login.html", &context).unwrap()).into_response()
+}
 
+// 2. Procesar Login (POST /auth/login)
+pub async fn process_login(
+    cookies: Cookies,
+    Form(form): Form<LoginForm>,
+) -> Response {
+    let admin_pass = std::env::var("ADMIN_PASSWORD").unwrap_or("admin123".to_string());
+
+    if form.password == admin_pass {
+        // Contraseña correcta: Creamos una cookie "session"
+        // En un sistema real usaríamos tokens JWT, pero para esto basta un valor secreto simple
+        let mut cookie = Cookie::new("admin_session", "activa");
+        cookie.set_path("/");
+        cookie.set_http_only(true); // JS no puede leerla (Seguridad XSS)
+        cookies.add(cookie);
+
+        Redirect::to("/admin").into_response()
+    } else {
+        // 🛡️ DEFENSA CONTRA FUERZA BRUTA
+        // Hacemos esperar al atacante 2 segundos artificialmente
+        sleep(Duration::from_secs(2)).await;
+        
+        // Contraseña incorrecta: Volver al login con error
+        Redirect::to("/login?error=1").into_response()
+    }
+}
+
+// 3. Modifica tu dashboard para usar COOKIES en vez de ?pwd
+pub async fn admin_dashboard(
+    cookies: Cookies, // <--- Inyectamos Cookies
+    State(state): State<AppState>,
+) -> Response {
+    
+    // VERIFICACIÓN DE SEGURIDAD
+    let auth_cookie = cookies.get("admin_session");
+    if auth_cookie.is_none() {
+        // Si no hay cookie, ¡fuera! Al login.
+        return Redirect::to("/login").into_response();
+    }
+    
     let collection = state.db.collection::<Iman>("imanes");
 
     // 2. MÉTRICAS GENERALES (KPIs)
@@ -173,4 +224,46 @@ pub async fn admin_dashboard(
         Ok(html) => Html(html).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
     }
+}
+
+
+
+// POST /api/admin/generate_batch
+pub async fn generate_batch(
+    cookies: Cookies,
+    State(state): State<AppState>,
+) -> Response {
+    // 1. Seguridad (Cookie Check)
+    if cookies.get("admin_session").is_none() {
+        return Redirect::to("/login").into_response();
+    }
+
+    let collection = state.db.collection::<Iman>("imanes");
+    let mut docs = Vec::new();
+    
+    // Usamos un prefijo y números aleatorios para evitar colisiones
+    // (Simple implementation)
+    use rand::Rng; // Asegúrate de agregar `rand = "0.8"` en Cargo.toml si quieres random real
+    // O usa timestamp simple:
+    let lote_id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+
+    for i in 1..=50 {
+        let codigo = format!("LOTE{}-NUM{:03}", lote_id, i); // Ej: LOTE17823-NUM001
+        
+        docs.push(Iman {
+            id: None,
+            codigo,
+            target_url: None, // Vírgen
+            active: false,    // Inactivo hasta que se configure (o true si quieres que ya funcionen)
+            visitas: 0,
+        });
+    }
+
+    // Insertar en Mongo
+    if let Err(e) = collection.insert_many(docs, None).await {
+         return (StatusCode::INTERNAL_SERVER_ERROR, format!("Error DB: {}", e)).into_response();
+    }
+
+    // Redirigir al dashboard con mensaje de éxito
+    Redirect::to("/admin").into_response()
 }
