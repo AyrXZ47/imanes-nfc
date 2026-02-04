@@ -302,7 +302,7 @@ pub async fn admin_dashboard(
     context.insert("chart_labels", &month_labels);
     
     // Pasamos el dominio base para facilitar la grabación de NFCs
-    context.insert("base_url", "https://imanes-nfc-production.up.railway.app"); 
+    context.insert("base_url", &base_url); 
 
     match state.tera.render("admin.html", &context) {
         Ok(html) => Html(html).into_response(),
