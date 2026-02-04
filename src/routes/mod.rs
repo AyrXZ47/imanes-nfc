@@ -1,11 +1,10 @@
 use futures::stream::TryStreamExt;
-use mongodb::options::FindOptions;
 use tower_cookies::{Cookies, Cookie};
 use tokio::time::{sleep, Duration};
 use time::OffsetDateTime;
 use axum::http::header;
 use mongodb::bson::DateTime;
-use chrono::{Datelike, Utc, TimeZone};
+use chrono::{Datelike, Utc};
 
 use axum::{
     extract::{Form, Path, State},
@@ -289,6 +288,7 @@ pub async fn admin_dashboard(
     }).collect();
 
     let virgenes = total_imanes - activos_total;
+    let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
 
     // Pasamos datos a la plantilla
     let mut context = tera::Context::new();
