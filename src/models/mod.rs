@@ -1,4 +1,3 @@
-// src/models/mod.rs
 use serde::{Deserialize, Serialize};
 use mongodb::bson::oid::ObjectId;
 use mongodb::bson::DateTime;
@@ -12,16 +11,18 @@ pub struct Iman {
     pub active: bool,
     pub visitas: u32,
 
-    // --- CAMPOS NUEVOS (El Historial) ---
-    // Usamos Option porque los imanes viejos no tienen este dato
-    // y para no romper la compatibilidad.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub activated_at: Option<DateTime>, 
     
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub activated_at: Option<DateTime>, // ¿Cuándo se configuró por primera vez?
-    
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_scan_at: Option<DateTime>, // ¿Cuándo fue la última vez que alguien lo tocó?
+    pub last_scan_at: Option<DateTime>, 
 
     #[serde(default)] 
     pub exported: bool, 
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lote_nombre: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lote_fecha: Option<DateTime>,
 }

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StikerTunning - Panel de Control</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚀</text></svg>">
 </head>
@@ -44,19 +45,101 @@
                 <h3 class="text-slate-400 text-sm font-medium uppercase">En Inventario (Vírgenes)</h3>
                 <p class="text-4xl font-bold text-white mt-2">{{ virgenes }}</p>
                 <div class="mt-2 text-xs text-yellow-400">📦 Listos para venta</div>
-                <form action="/api/admin/generate" method="POST" onsubmit="return confirm('¿Generar 50 imanes nuevos?');">
-                  <button type="submit" class="bg-blue-600 text-xs px-3 py-2 rounded hover:bg-blue-500 w-full mt-2">
-                  🏭 Fabricar Lote (50)
-                  </button>
-                  <a href="/api/admin/export" class="block text-center bg-green-600 hover:bg-green-500 text-xs px-3 py-2 rounded w-full mt-2 transition">
-                    ⬇️ Descargar CSV (Excel)
-                  </a>
-                </form>
             </div>
             <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
                 <h3 class="text-slate-400 text-sm font-medium uppercase">Total Fabricados</h3>
                 <p class="text-4xl font-bold text-white mt-2">{{ total }}</p>
                 <div class="mt-2 text-xs text-blue-400">🏭 Capacidad instalada</div>
+            </div>
+        </div>
+
+        <!-- Estadísticas Mensuales (Movidas aquí) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg flex items-center justify-between">
+                <div>
+                    <h3 class="text-slate-400 text-sm font-medium uppercase">Activados este Mes</h3>
+                    <p class="text-3xl font-bold text-white mt-1">{{ activos_mes }}</p>
+                </div>
+                <div class="text-4xl">📅</div>
+            </div>
+
+            <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg flex items-center justify-between">
+                <div>
+                    <h3 class="text-slate-400 text-sm font-medium uppercase">Mes Anterior</h3>
+                    <p class="text-3xl font-bold text-gray-400 mt-1">{{ activos_mes_ant }}</p>
+                </div>
+                <div class="text-4xl opacity-50">⏮️</div>
+            </div>
+        </div>
+
+        <!-- Cambio B: El Nuevo Panel de Generación (Con Nombre) -->
+        <div class="card bg-slate-800 shadow-xl mb-8 border border-gray-700">
+            <div class="card-body">
+                <h2 class="card-title text-accent">🏭 Generar Nuevo Lote de Producción</h2>
+                <form action="/api/admin/generate" method="POST" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    
+                    <div class="form-control">
+                        <label class="label"><span class="label-text text-gray-300">Nombre del Lote / Cliente</span></label>
+                        <input type="text" name="nombre_lote" placeholder="Huasteca" class="input input-bordered bg-slate-900 border-slate-600" required />
+                    </div>
+
+                    <div class="form-control">
+                        <label class="label"><span class="label-text text-gray-300">Cantidad de Links</span></label>
+                        <input type="number" name="cantidad" placeholder="50" class="input input-bordered bg-slate-900 border-slate-600" required min="1" max="1000" />
+                    </div>
+
+                    <div class="form-control mt-9">
+                        <button type="submit" class="btn btn-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                            Fabricar Lote
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Cambio C: La Tabla "Blockchain" de Lotes (Con Buscador) -->
+        <div class="card bg-slate-800 shadow-xl mb-8 border border-gray-700">
+            <div class="card-body">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="card-title text-white">📦 Historial de Lotes</h2>
+                    <input type="text" id="loteSearch" placeholder="Buscar lote..." class="input input-sm input-bordered w-full max-w-xs bg-slate-900 border-slate-600" onkeyup="filterLotes()" />
+                </div>
+
+                <div class="overflow-x-auto max-h-96 overflow-y-auto"> 
+                    <table class="table w-full" id="lotesTable">
+                        <thead>
+                            <tr class="text-gray-400 border-slate-700">
+                                <th>Fecha</th>
+                                <th>Nombre del Lote</th>
+                                <th>Links Totales</th>
+                                <th>Ya Activados</th>
+                                <th>Acciones (Descarga)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for lote in lotes %}
+                            <tr class="hover:bg-slate-700/50 border-slate-700">
+                                <td>{{ lote.fecha | date(format="%d/%m/%Y") }}</td>
+                                <td class="font-bold text-accent">{{ lote.nombre }}</td>
+                                <td>{{ lote.total }}</td>
+                                <td>
+                                    <div class="badge badge-success gap-2">{{ lote.activados }}</div>
+                                </td>
+                                <td>
+                                    <div class="dropdown dropdown-left">
+                                        <label tabindex="0" class="btn btn-sm btn-outline btn-info">⬇️ CSV</label>
+                                                                                                        <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 border border-gray-600 z-[1]">
+                                                                                                            <li><a href="/api/csv/{{ lote.nombre }}/full?ts={{ lote.timestamp }}">📄 Todo el Lote</a></li>
+                                                                                                            <li><a href="/api/csv/{{ lote.nombre }}/virgin?ts={{ lote.timestamp }}" class="text-green-400">🛡️ Solo Vírgenes</a></li>
+                                                                                                        </ul>
+                                                                                                            </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -141,27 +224,6 @@
         </div>
 
 
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-    
-    <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg flex items-center justify-between">
-        <div>
-            <h3 class="text-slate-400 text-sm font-medium uppercase">Activados este Mes</h3>
-            <p class="text-3xl font-bold text-white mt-1">{{ activos_mes }}</p>
-        </div>
-        <div class="text-4xl">📅</div>
-    </div>
-
-    <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg flex items-center justify-between">
-        <div>
-            <h3 class="text-slate-400 text-sm font-medium uppercase">Mes Anterior</h3>
-            <p class="text-3xl font-bold text-gray-400 mt-1">{{ activos_mes_ant }}</p>
-        </div>
-        <div class="text-4xl opacity-50">⏮️</div>
-    </div>
-
-  </div>
-
-
     </div>
 
     <script>
@@ -181,28 +243,46 @@
             navigator.clipboard.writeText(text);
             alert("Link copiado al portapapeles 📋");
         }
+
+        function filterLotes() {
+            const input = document.getElementById('loteSearch');
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById('lotesTable');
+            const tr = table.getElementsByTagName('tr');
+
+            for (let i = 1; i < tr.length; i++) {
+                const td = tr[i].getElementsByTagName('td')[1]; // Columna de nombre
+                if (td) {
+                    const txtValue = td.textContent || td.innerText;
+                    if (txtValue.toLowerCase().indexOf(filter) > -1) {
+                        tr[i].style.display = "";
+                    } else {
+                        tr[i].style.display = "none";
+                    }
+                }
+            }
+        }
     </script>
     <script>
 
     // CONFIGURACIÓN DE LA GRÁFICA
     const ctx = document.getElementById('viralChart').getContext('2d');
     
-    // Convertimos los datos de Tera a JSON seguro para JS
-    const labels = [
-        {% for iman in top_imanes %}"{{ iman.codigo }}",{% endfor %}
-    ];
-    const dataPoints = [
-        {% for iman in top_imanes %}{{ iman.visitas }},{% endfor %}
-    ];
+    // Cambio D: Script para el Top 10
+    const rawLabels = [{% for iman in top_imanes %}"{{ iman.codigo }}",{% endfor %}];
+    const rawData = [{% for iman in top_imanes %}{{ iman.visitas }},{% endfor %}];
+    
+    const topLabels = rawLabels.slice(0, 10);
+    const topData = rawData.slice(0, 10);
 
     new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: labels,
+            labels: topLabels,
             datasets: [{
                 label: 'Escaneos Totales',
-                data: dataPoints,
-                backgroundColor: 'rgba(168, 85, 247, 0.6)', // Color Púrpura Cyberpunk
+                data: topData,
+                backgroundColor: 'rgba(168, 85, 247, 0.6)', 
                 borderColor: 'rgba(168, 85, 247, 1)',
                 borderWidth: 1
             }]

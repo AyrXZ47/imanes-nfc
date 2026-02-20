@@ -153,6 +153,12 @@ pub struct LoginForm {
     password: String,
 }
 
+#[derive(Deserialize)]
+pub struct GenerateLoteRequest {
+    cantidad: i32,
+    nombre_lote: String,
+}
+
 // 1. Mostrar pantalla de Login (GET /login)
 pub async fn login_page(State(state): State<AppState>) -> Response {
     let context = tera::Context::new();
@@ -290,12 +296,50 @@ pub async fn admin_dashboard(
     let virgenes = total_imanes - activos_total;
     let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
 
+    // --- CÁLCULO DE LOTES (HISTORIAL) ---
+    use std::collections::HashMap;
+    // Agrupamos por una clave única: "Nombre|Timestamp"
+    let mut lotes_map: HashMap<String, (String, mongodb::bson::DateTime, i32, i32)> = HashMap::new();
+
+    for iman in &all_imanes {
+        if let (Some(lote_n), Some(lote_f)) = (&iman.lote_nombre, &iman.lote_fecha) {
+            let key = format!("{}|{}", lote_n, lote_f.timestamp_millis());
+            let entry = lotes_map.entry(key).or_insert((
+                lote_n.clone(),
+                *lote_f, 
+                0, 
+                0
+            ));
+            entry.2 += 1; // total
+            if iman.active {
+                entry.3 += 1; // activados
+            }
+        }
+    }
+
+    let mut lotes_view: Vec<serde_json::Value> = lotes_map.into_iter().map(|(_, (nombre, fecha, total, activados))| {
+        let fecha_iso = chrono::DateTime::from_timestamp_millis(fecha.timestamp_millis())
+            .map(|dt| dt.to_rfc3339());
+        
+        serde_json::json!({
+            "nombre": nombre,
+            "fecha": fecha_iso,
+            "timestamp": fecha.timestamp_millis(), // <--- Enviamos el valor exacto de Mongo
+            "total": total,
+            "activados": activados
+        })
+    }).collect();
+
+    // Ordenar lotes por fecha (más nuevos primero)
+    lotes_view.sort_by(|a, b| b["fecha"].as_str().cmp(&a["fecha"].as_str()));
+
     // Pasamos datos a la plantilla
     let mut context = tera::Context::new();
     context.insert("total", &total_imanes);
     context.insert("activos", &activos_total);
     context.insert("virgenes", &virgenes);
     context.insert("top_imanes", &top_10_view);
+    context.insert("lotes", &lotes_view); // <--- NUEVO
     context.insert("activos_mes", &activos_este_mes);      
     context.insert("activos_mes_ant", &activos_mes_pasado); 
     context.insert("chart_data", &history_counts);
@@ -312,10 +356,11 @@ pub async fn admin_dashboard(
 
 
 
-// POST /api/admin/generate_batch
+// POST /api/admin/generate
 pub async fn generate_batch(
     cookies: Cookies,
     State(state): State<AppState>,
+    Form(payload): Form<GenerateLoteRequest>,
 ) -> Response {
     // 1. Seguridad (Cookie Check)
     if cookies.get("admin_session").is_none() {
@@ -325,32 +370,38 @@ pub async fn generate_batch(
     let collection = state.db.collection::<Iman>("imanes");
     let mut docs = Vec::new();
     
-    // Usamos un prefijo y números aleatorios para evitar colisiones
-    // (Simple implementation)
-    // O usa timestamp simple:
-    let lote_id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let now_mongo = DateTime::now();
+    // Usamos segundos desde la época UNIX para garantizar unicidad absoluta en cada ejecución
+    let unique_id = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() % 1000000; // Tomamos los últimos 6 dígitos para que no sea excesivamente largo
+    
+    // Limpiamos el nombre del lote para el código (Quitar espacios y a Mayúsculas)
+    let nombre_lote_slug = payload.nombre_lote.replace(" ", "").to_uppercase();
 
-    for i in 1..=50 {
-        let codigo = format!("LOTE{}-NUM{:03}", lote_id, i); // Ej: LOTE17823-NUM001
+    for i in 1..=payload.cantidad {
+        // Formato: NOMBRE-UNIQUEID-NUM (Ej: HUASTECA-748291-0001)
+        let codigo = format!("{}-{}-{:04}", nombre_lote_slug, unique_id, i); 
         
         docs.push(Iman {
             id: None,
             codigo,
-            target_url: None, // Vírgen
-            active: false,    // Inactivo hasta que se configure (o true si quieres que ya funcionen)
+            target_url: None,
+            active: false,
             visitas: 0,
             activated_at: None,
             last_scan_at: None,
             exported: false,
+            lote_nombre: Some(payload.nombre_lote.clone()),
+            lote_fecha: Some(now_mongo),
         });
     }
 
-    // Insertar en Mongo
     if let Err(e) = collection.insert_many(docs, None).await {
          return (StatusCode::INTERNAL_SERVER_ERROR, format!("Error DB: {}", e)).into_response();
     }
 
-    // Redirigir al dashboard con mensaje de éxito
     Redirect::to("/admin").into_response()
 }
 
@@ -411,6 +462,57 @@ pub async fn export_csv(
         [
             (header::CONTENT_TYPE, "text/csv"),
             (header::CONTENT_DISPOSITION, "attachment; filename=\"lote_produccion_nuevo.csv\""),
+        ],
+        csv_content,
+    ).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct ExportQuery {
+    ts: Option<i64>,
+}
+
+// GET /api/csv/:lote_nombre/:tipo
+pub async fn export_csv_lote(
+    cookies: Cookies,
+    State(state): State<AppState>,
+    Path((lote_nombre, tipo)): Path<(String, String)>,
+    axum::extract::Query(query): axum::extract::Query<ExportQuery>,
+) -> Response {
+    if cookies.get("admin_session").is_none() {
+        return Redirect::to("/login").into_response();
+    }
+
+    let collection = state.db.collection::<Iman>("imanes");
+    
+    let mut filter = if tipo == "virgin" {
+        doc! { "lote_nombre": &lote_nombre, "active": false }
+    } else {
+        doc! { "lote_nombre": &lote_nombre }
+    };
+
+    // Si nos pasan un timestamp, filtramos por el lote exacto
+    if let Some(ts) = query.ts {
+        filter.insert("lote_fecha", mongodb::bson::DateTime::from_millis(ts));
+    }
+
+    let options = mongodb::options::FindOptions::builder()
+        .sort(doc! { "codigo": 1 }) // Ordenar por código para que el CSV sea legible
+        .build();
+
+    let mut cursor = collection.find(filter, options).await.unwrap();
+    let mut csv_content = String::from("codigo,url_completa\n");
+    let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+    while let Ok(Some(iman)) = cursor.try_next().await {
+        let linea = format!("{},{}/v/{}\n", iman.codigo, base_url, iman.codigo);
+        csv_content.push_str(&linea);
+    }
+
+    (
+        [
+            (header::CONTENT_TYPE, "text/csv".to_string()),
+            (header::CONTENT_DISPOSITION, format!("attachment; filename=\"lote_{}_{}.csv\"", lote_nombre, tipo)),
         ],
         csv_content,
     ).into_response()

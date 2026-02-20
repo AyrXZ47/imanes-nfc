@@ -57,6 +57,7 @@ async fn main() {
         .route("/api/admin/generate", post(routes::generate_batch))
         .route("/auth/logout", get(routes::logout))
         .route("/api/admin/export", get(routes::export_csv))
+        .route("/api/csv/:lote_nombre/:tipo", get(routes::export_csv_lote))
         .layer(CookieManagerLayer::new()) // ¡Activa cookies!
         .layer(axum::middleware::from_fn(no_cache_headers)) //MIDDLEWARE
         .with_state(state);
