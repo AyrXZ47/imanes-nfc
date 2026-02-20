@@ -37,14 +37,14 @@
         
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
-                <h3 class="text-slate-400 text-sm font-medium uppercase">Imanes Activados</h3>
+                <h3 class="text-slate-400 text-sm font-medium uppercase">Productos Configurados</h3>
                 <p class="text-4xl font-bold text-white mt-2">{{ activos }}</p>
-                <div class="mt-2 text-xs text-green-400">🔥 Clientes felices</div>
+                <div class="mt-2 text-xs text-green-400">🔥 Clientes con URL activa</div>
             </div>
             <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
-                <h3 class="text-slate-400 text-sm font-medium uppercase">En Inventario (Vírgenes)</h3>
-                <p class="text-4xl font-bold text-white mt-2">{{ virgenes }}</p>
-                <div class="mt-2 text-xs text-yellow-400">📦 Listos para venta</div>
+                <h3 class="text-slate-400 text-sm font-medium uppercase">Links Disponibles</h3>
+                <p class="text-4xl font-bold text-white mt-2">{{ disponibles }}</p>
+                <div class="mt-2 text-xs text-yellow-400">📦 Listos para grabación</div>
             </div>
             <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
                 <h3 class="text-slate-400 text-sm font-medium uppercase">Total Fabricados</h3>
@@ -109,34 +109,35 @@
                 <div class="overflow-x-auto max-h-96 overflow-y-auto"> 
                     <table class="table w-full" id="lotesTable">
                         <thead>
-                            <tr class="text-gray-400 border-slate-700">
-                                <th>Fecha</th>
-                                <th>Nombre del Lote</th>
-                                <th>Links Totales</th>
-                                <th>Ya Activados</th>
-                                <th>Acciones (Descarga)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for lote in lotes %}
-                            <tr class="hover:bg-slate-700/50 border-slate-700">
-                                <td>{{ lote.fecha | date(format="%d/%m/%Y") }}</td>
-                                <td class="font-bold text-accent">{{ lote.nombre }}</td>
-                                <td>{{ lote.total }}</td>
-                                <td>
-                                    <div class="badge badge-success gap-2">{{ lote.activados }}</div>
-                                </td>
-                                <td>
-                                    <div class="dropdown dropdown-left">
-                                        <label tabindex="0" class="btn btn-sm btn-outline btn-info">⬇️ CSV</label>
-                                                                                                        <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 border border-gray-600 z-[1]">
-                                                                                                            <li><a href="/api/csv/{{ lote.nombre }}/full?ts={{ lote.timestamp }}">📄 Todo el Lote</a></li>
-                                                                                                            <li><a href="/api/csv/{{ lote.nombre }}/virgin?ts={{ lote.timestamp }}" class="text-green-400">🛡️ Solo Vírgenes</a></li>
-                                                                                                        </ul>
-                                                                                                            </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
+                                                        <tr class="text-gray-400 border-slate-700">
+                                                            <th>Fecha de Creación</th>
+                                                            <th>Nombre del Lote / Cliente</th>
+                                                            <th>Total Links</th>
+                                                            <th>Grabados (NFC)</th>
+                                                            <th>Acciones de Exportación</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for lote in lotes %}
+                                                        <tr class="hover:bg-slate-700/50 border-slate-700">
+                                                            <td>{{ lote.fecha | date(format="%d/%m/%Y") }}</td>
+                                                            <td class="font-bold text-accent">{{ lote.nombre }}</td>
+                                                            <td>{{ lote.total }}</td>
+                                                            <td>
+                                                                <div class="badge badge-info gap-2">{{ lote.asignados }}</div>
+                                                            </td>
+                                                            <td>
+                                                                <div class="dropdown dropdown-left">
+                                                                    <label tabindex="0" class="btn btn-sm btn-outline btn-info">⬇️ Descargar</label>
+                                                                    <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 border border-gray-600 z-[1]">
+                                                                        <li><a href="/api/csv/{{ lote.nombre }}/full?ts={{ lote.timestamp }}">📄 Lote Completo</a></li>
+                                                                        <li><a href="/api/csv/{{ lote.nombre }}/available?ts={{ lote.timestamp }}" class="text-green-400">🛡️ Solo Disponibles</a></li>
+                                                                    </ul>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                        {% endfor %}
+                            
                         </tbody>
                     </table>
                 </div>

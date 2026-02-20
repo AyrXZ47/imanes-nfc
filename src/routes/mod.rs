@@ -293,7 +293,7 @@ pub async fn admin_dashboard(
         })
     }).collect();
 
-    let virgenes = total_imanes - activos_total;
+    let disponibles_total = all_imanes.len() - activos_total;
     let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
 
     // --- CÁLCULO DE LOTES (HISTORIAL) ---
@@ -311,22 +311,22 @@ pub async fn admin_dashboard(
                 0
             ));
             entry.2 += 1; // total
-            if iman.active {
-                entry.3 += 1; // activados
+            if iman.visitas > 0 {
+                entry.3 += 1; // Asignados (Ya grabados en NFC)
             }
         }
     }
 
-    let mut lotes_view: Vec<serde_json::Value> = lotes_map.into_iter().map(|(_, (nombre, fecha, total, activados))| {
+    let mut lotes_view: Vec<serde_json::Value> = lotes_map.into_iter().map(|(_, (nombre, fecha, total, asignados))| {
         let fecha_iso = chrono::DateTime::from_timestamp_millis(fecha.timestamp_millis())
             .map(|dt| dt.to_rfc3339());
         
         serde_json::json!({
             "nombre": nombre,
             "fecha": fecha_iso,
-            "timestamp": fecha.timestamp_millis(), // <--- Enviamos el valor exacto de Mongo
+            "timestamp": fecha.timestamp_millis(),
             "total": total,
-            "activados": activados
+            "asignados": asignados
         })
     }).collect();
 
@@ -337,9 +337,9 @@ pub async fn admin_dashboard(
     let mut context = tera::Context::new();
     context.insert("total", &total_imanes);
     context.insert("activos", &activos_total);
-    context.insert("virgenes", &virgenes);
+    context.insert("disponibles", &disponibles_total);
     context.insert("top_imanes", &top_10_view);
-    context.insert("lotes", &lotes_view); // <--- NUEVO
+    context.insert("lotes", &lotes_view); 
     context.insert("activos_mes", &activos_este_mes);      
     context.insert("activos_mes_ant", &activos_mes_pasado); 
     context.insert("chart_data", &history_counts);
@@ -485,8 +485,8 @@ pub async fn export_csv_lote(
 
     let collection = state.db.collection::<Iman>("imanes");
     
-    let mut filter = if tipo == "virgin" {
-        doc! { "lote_nombre": &lote_nombre, "active": false }
+    let mut filter = if tipo == "available" {
+        doc! { "lote_nombre": &lote_nombre, "visitas": 0 }
     } else {
         doc! { "lote_nombre": &lote_nombre }
     };
